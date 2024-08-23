@@ -11,6 +11,7 @@ import gnupg
 import os
 import re
 import sys
+import tempfile
 from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
@@ -112,7 +113,7 @@ def getGPGconfig(cfgfile):
 
 class GPGCipher(object):
     def __init__(self, gnupghome=None, keyring=None, recipients=None, symmetric=None): 
-        self.gnupghome = gnupghome
+        self.gnupghome = os.path.expanduser(gnupghome)
         self.keyring = keyring
         self.recipients = recipients
         self.symmetric = symmetric
@@ -193,6 +194,7 @@ def DecryptPassword(data, cfgfile, file=None):
     '''
     home, keyring, recipients, symmtric, key = getGPGconfig(cfgfile)
     cipher = GPGCipher(home, keyring, recipients, symmtric)
+    #print(f"\n----- cipher: {cipher.__repr__} -----\n")
     if file:
         clear = cipher.decrypt(data, key, file=True)
     else:    
@@ -319,10 +321,6 @@ def exportEntry(entry, root=None):
             f.write(entry['password'])
     else:
         print(f"--- skip entry['service'] with password of type {type(entry['password'])} ---")
-    '''
-    dirs = re.split(r'\s+', tag.strip())
-    dir = '/'.join(dirs)
-    '''
 
 def exportDb(dbfile):
     """
@@ -428,23 +426,44 @@ def multilineInput(opening='content'):
     result = f"{'\n'.join(lines)}"
     return result
 
-
-def insertEntry(dbfile, cfgfile):
+def readFile(fileName):
+    """
+    read and return text from file
+    """
+    with open(fileName, 'r') as f:
+        content = f.read()
+    return content
+    
+def insertEntry(dbfile, cfgfile, editor=False):
     """
     Insert one entry to db
     """
+    if editor:
+        fp = tempfile.NamedTemporaryFile(delete_on_close=False)
+        tempPwdFile = fp.name
+        cfg = PassCfg('dontcare', cfgfile)
+        myeditor = cfg.get_config("OTHERS", "editor")
+        delay = cfg.get_config("OTHERS", "sleep")
     date = f'{datetime.today():%Y-%m-%d}'
     entry = {}
     service = input("Service: ")
     print()
     username = input("Username: ")
     print()
-    clear = multilineInput(f"Password")
+    if not editor:
+        clear = multilineInput("Password: ")
+    else:
+        print(f"\n\n --- Will open '{myeditor}' for creating password in {delay} seconds ---\n\n")
+        os.system(f"sleep {delay}")
+        os.system(f"{myeditor} {tempPwdFile}")
+        clear = readFile(f"{tempPwdFile}")
+        os.system(f"unlink {tempPwdFile}")
+    password = EncryptPassword(clear, cfgfile)
     print()
     tag = input("Tag: ")
     print()
-    note = multilineInput("Note")
-    password = EncryptPassword(clear, cfgfile)
+    note = input("Note: ")
+    print()
     entry["service"] = service
     entry["username"] = username
     entry["password"] = password
@@ -472,6 +491,7 @@ def main(args):
     remove = args.remove
     backup = args.backup
     query = args.query
+    editor = args.editor
     service = args.service
     username = args.username
     tag = args.tag
@@ -491,7 +511,7 @@ def main(args):
     if export:
         exportDb(dbfile)
     if insert:
-        insertEntry(dbfile, cfgfile)
+        insertEntry(dbfile, cfgfile, editor)
 
 if __name__ == "__main__":
     
@@ -516,8 +536,14 @@ if __name__ == "__main__":
         default=False,
         action="store_true",
         help="Insert one entry to Db -- all input from keyboard")
-    parser.add_argument("-r",
+    parser.add_argument(
+        "--editor",
+        default=False,
+        action="store_true",
+        help="Use configured (in cfgfile) editor for inserting entry")
+    parser.add_argument(
         "--remove",
+        "--delete",
         default=False,
         action="store_true",
         help="Delete entries by service, username and/or, tag")
@@ -564,7 +590,7 @@ if __name__ == "__main__":
     parser.add_argument("-n",
         "--note",
         default=None,
-        help="Default note")    # Optional verbosity counter (eg. -v, -vv, -vvv, etc.)
+        help="Default note")
     parser.add_argument(
         "-v",
         "--verbose",
