@@ -275,7 +275,8 @@ def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=Non
         print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
         db['ACCOUNT'].insert(entry) 
     else:
-        sys.exit(99, f"imported file {datafile} without extention .gpg")
+        print(f"----- imported file {datafile} without extention .gpg -----")
+        sys.exit(98)
 
 def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
     """
@@ -283,9 +284,12 @@ def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
         -- no check on exist or not
         -- datafile like service.gpg
     """
+    #   expand directory
+    directory = os.path.expanduser(directory)
     #   check if directory is real
     if not os.path.isdir(directory):
-        sys.exit(99, f"{directory} is NOT a directory, see you next time ...")
+        print(f"----- {directory} is NOT a directory, see you next time ... -----")
+        sys.exit(99)
     
     #   walk thru all files in directory and process
     for root, _dirs, files in os.walk(directory):
@@ -505,7 +509,7 @@ def main(args):
     if remove:
         deleted = delete(dbfile, cfgfile, service, username, tag, showpassword, backup)
     if importFile:
-        fileImport(dbfile, cfgfile, importFile, username, tag. note)
+        fileImport(dbfile, cfgfile, importFile, username, tag, note)
     if importDir:
         dirImport(dbfile, cfgfile, importDir, username, tag, note)
     if export:
