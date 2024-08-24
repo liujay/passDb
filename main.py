@@ -127,7 +127,7 @@ class GPGCipher(object):
         else:
             cipher = gnupg.GPG()
         if self.symmetric == 'True':
-            #print(f"### SYMMETRIC encryption ###")
+            print(f"### SYMMETRIC encryption ###")
             crypted = cipher.encrypt(
                 data,
                 recipients = None,
@@ -135,7 +135,7 @@ class GPGCipher(object):
                 passphrase = passphrase
             )
         else:
-            #print(f"### PUB-KEY encryption ###")
+            print(f"### PUB-KEY encryption ###")
             crypted = cipher.encrypt(
                 data,
                 recipients = self.recipients,
@@ -151,39 +151,34 @@ class GPGCipher(object):
             cipher = gnupg.GPG(gnupghome=self.gnupghome, keyring=self.keyring)
         else:
             cipher = gnupg.GPG()
-        if self.symmetric == 'True':
-            #print(f"### SYMMETRIC decryption ###")
-            if file:
-                clear = cipher.decrypt_file(
-                    open(data, 'rb'),
-                    passphrase = passphrase
-                )
-            else: 
-                clear = cipher.decrypt(
-                    data,
-                    passphrase = passphrase
-                )
-        else:
-            #print(f"### PUB-KEY decryption ###")
-            if file:
-                clear = cipher.decrypt_file(
-                    open(data, 'rb'),
-                )
-            else:
-                clear = cipher.decrypt(
-                    data,
-                )
+        #   no need to distinguish between pub- or symmetric- encrypted data
+        if file:
+            clear = cipher.decrypt_file(
+                open(data, 'rb'),
+                passphrase = passphrase
+            )
+        else: 
+            clear = cipher.decrypt(
+                data,
+                passphrase = passphrase
+            )
         if clear.ok:
             return clear.data.decode()
         else:
             return f"encription error with status: {clear.status}"
     
-def EncryptPassword(data, cfgfile):
+def EncryptPassword(data, cfgfile, transcode=False):
     '''
     Encrypt the given data/string of password with cipher
     '''
-    home, keyring, recipients, symmtric, key = getGPGconfig(cfgfile)
-    cipher = GPGCipher(home, keyring, recipients, symmtric)
+    home, keyring, recipients, symmetric, key = getGPGconfig(cfgfile)
+    print(f"----- Original symm value: {symmetric}")
+    #   negate symmetric to achieve trancode
+    #
+    if transcode:
+        symmetric = 'False' if symmetric=='True' else 'True'
+    print(f"----- Flipped symm value: {symmetric}")
+    cipher = GPGCipher(home, keyring, recipients, symmetric)
     encoded = cipher.encrypt(data, key)
     #print(f"encrypting password: {data}")
     return encoded
@@ -192,8 +187,8 @@ def DecryptPassword(data, cfgfile, file=None):
     '''
     Decrypt the given data/string of encoded password with cipher.
     '''
-    home, keyring, recipients, symmtric, key = getGPGconfig(cfgfile)
-    cipher = GPGCipher(home, keyring, recipients, symmtric)
+    home, keyring, recipients, symmetric, key = getGPGconfig(cfgfile)
+    cipher = GPGCipher(home, keyring, recipients, symmetric)
     #print(f"\n----- cipher: {cipher.__repr__} -----\n")
     if file:
         clear = cipher.decrypt(data, key, file=True)
@@ -224,9 +219,10 @@ def displayResults(results, cfgfile=None, showpassword=False):
     else:
         print(f"--- Empty result ---")
 
-def init(dbfile, cfgfile):
+def init(dbfile, cfgfile, listcfg=True):
     my_pass = PassCfg(dbfile, cfgfile)
-    my_pass.list_config()
+    if listcfg :
+        my_pass.list_config()
     my_pass.check_table()
 
 def showAll(dbfile, cfgfile=None, showpassword=False):
@@ -334,6 +330,25 @@ def exportDb(dbfile):
     for entry in db['ACCOUNT'].rows:
         print(entry)
         exportEntry(entry, root='_Export')
+
+def transcodeDb(dbfile, cfgfile):
+    """
+    
+    """
+    db = Database(dbfile)
+    #newDbfile = f"_trans-{dbfile}"
+    #init(newDbfile, cfgfile, False)
+    entries = [ e for e in db['ACCOUNT'].rows ]
+    for entry in entries:
+        #print(f"Original: {entry}")
+        clear = DecryptPassword(entry['password'], cfgfile)
+        password = EncryptPassword(clear, cfgfile, True)
+        #print(f"transcoded: {entry}")
+        print(f"transcode: {clear} --> {password}")
+        db['ACCOUNT'].update(entry['id'], {'password': password})
+    #
+    #   Remind user to update cfgfile
+    print(f"\n\n!!! Be sure to update {cfgfile} before run!!!\n\n")
 
 def search(dbfile, cfgfile, service=None, username=None, tag=None, showpassword=False):
     """
@@ -495,6 +510,7 @@ def main(args):
     remove = args.remove
     backup = args.backup
     query = args.query
+    transcode = args.transcode
     editor = args.editor
     service = args.service
     username = args.username
@@ -516,6 +532,8 @@ def main(args):
         exportDb(dbfile)
     if insert:
         insertEntry(dbfile, cfgfile, editor)
+    if transcode:
+        transcodeDb(dbfile, cfgfile)
 
 if __name__ == "__main__":
     
@@ -556,6 +574,11 @@ if __name__ == "__main__":
         default=True,
         action = "store_false",
         help="Backup on remove -- Default to True")
+    parser.add_argument(
+        "--transcode",
+        default=False,
+        action = "store_true",
+        help="Switch password encryption  PUB-key <--> Symm-key")
     parser.add_argument(
         "--show",
         default=False,
