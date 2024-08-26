@@ -17,14 +17,6 @@ from datetime import datetime
 from pathlib import Path
 from sqlite_utils import Database
 
-DefaultEntry = {
-    "service": None,
-    "username": None,
-    "password": None,
-    "tag": None,
-    "note": None,    
-}
-
 class PassCfg:
     def __init__(self, dbfile, configfile, verbose=False):
         self.db = dbfile
@@ -127,7 +119,7 @@ class GPGCipher(object):
         else:
             cipher = gnupg.GPG()
         if self.symmetric == 'True':
-            print(f"### SYMMETRIC encryption ###")
+            #print(f"### SYMMETRIC encryption ###")
             crypted = cipher.encrypt(
                 data,
                 recipients = None,
@@ -135,7 +127,7 @@ class GPGCipher(object):
                 passphrase = passphrase
             )
         else:
-            print(f"### PUB-KEY encryption ###")
+            #print(f"### PUB-KEY encryption ###")
             crypted = cipher.encrypt(
                 data,
                 recipients = self.recipients,
@@ -144,7 +136,9 @@ class GPGCipher(object):
         if crypted.ok:
             return crypted.data.decode()
         else:
-            return f"encription error with status: {crypted.status}"
+            print(f"encription error with status: {crypted.status}")
+            print(f"  !!! Check if key cache expired !!!")
+            sys.exit(96)
 
     def decrypt(self, data, passphrase=None, file=False):
         if self.gnupghome:
@@ -165,7 +159,9 @@ class GPGCipher(object):
         if clear.ok:
             return clear.data.decode()
         else:
-            return f"encription error with status: {clear.status}"
+            print(f"decription error with status: {clear.status}")
+            print(f"  !!! Check if key cache expired !!!")
+            sys.exit(97)
     
 def EncryptPassword(data, cfgfile, transcode=False):
     '''
@@ -244,7 +240,7 @@ def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=Non
     filename = os.path.basename(datafile)
     name, ext = os.path.splitext(filename)
     if ext == '.gpg':
-        entry = DefaultEntry
+        entry = {}
         date = f'{datetime.today():%Y-%m-%d}'
         clear = DecryptPassword(datafile, cfgfile, file=True)
         password = EncryptPassword(clear, cfgfile)
@@ -322,29 +318,25 @@ def exportEntry(entry, root=None):
     else:
         print(f"--- skip entry['service'] with password of type {type(entry['password'])} ---")
 
-def exportDb(dbfile):
+def exportDb(dbfile, directory='_Export'):
     """
-    
+    export all passwords to files live in {directory}
     """
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
-        exportEntry(entry, root='_Export')
+        exportEntry(entry, directory)
 
 def transcodeDb(dbfile, cfgfile):
     """
-    
+    Convert pub <--> symmetirc key encryption
     """
     db = Database(dbfile)
-    #newDbfile = f"_trans-{dbfile}"
-    #init(newDbfile, cfgfile, False)
-    entries = [ e for e in db['ACCOUNT'].rows ]
-    for entry in entries:
-        #print(f"Original: {entry}")
+    for entry in db['ACCOUNT'].rows:
         clear = DecryptPassword(entry['password'], cfgfile)
+        #   set trancode to `True` in procedure EncrypPassword to activate it
+        #
         password = EncryptPassword(clear, cfgfile, True)
-        #print(f"transcoded: {entry}")
-        print(f"transcode: {clear} --> {password}")
         db['ACCOUNT'].update(entry['id'], {'password': password})
     #
     #   Remind user to update cfgfile
