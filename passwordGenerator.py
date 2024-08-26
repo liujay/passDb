@@ -9,16 +9,18 @@ def xkcdstyle(numwords=4, delimiter=' ', caseselection='lower', dict='/usr/share
         Other platforms may need to provide their own word-list.
     """
     with open(dict) as f:
-        words = [word.strip() for word in f]
-        #   word case
+        #   compose words[] based on caseselection
+        #
         match caseselection:
             case 'upper':
-                words = [word.upper() for word in words]
+                words = [word.strip().upper() for word in f]
             case 'first':
-                words = [word.title() for word in words]
+                words = [word.strip().title() for word in f]
             case _:
-                words = [word.lower() for word in words]
-        password = delimiter.join(secrets.choice(words) for i in range(numwords))
+                words = [word.strip().lower() for word in f]
+    #   compose the password from words[] and delimiter
+    #
+    password = delimiter.join(secrets.choice(words) for i in range(numwords))
     return password
 
 def randomstyle(numchars=16, specialchar=True):
