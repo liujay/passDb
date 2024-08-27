@@ -7,7 +7,9 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 import argparse
+import ast
 import gnupg
+import json
 import os
 import re
 import sys
@@ -458,7 +460,7 @@ def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     elif xkcd:
         #   get numberwords, delimiter, case, dictionary from cfgfile
         numberwords =  int(cfg.get_config("PASSWORD_PREFERENCE", "numberwords"))
-        delimiter = eval(cfg.get_config("PASSWORD_PREFERENCE", "delimiter"))
+        delimiter = ast.literal_eval(cfg.get_config("PASSWORD_PREFERENCE", "delimiter"))
         caseselection = cfg.get_config("PASSWORD_PREFERENCE", "caseselection")
         dict = cfg.get_config("PASSWORD_PREFERENCE", "dictionary")
         clear = xkcdstyle(numberwords, delimiter, caseselection, dict)
@@ -501,6 +503,56 @@ def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
     db['ACCOUNT'].insert(entry) 
 
+def fullExport(entry, tempFile):
+    """
+    Export decoded password entry to a json file for editing
+        id was removed before export
+    """
+    #   hide entry's id -- no update on this column
+    del entry['id']
+    with open(tempFile, 'w') as f:
+        json.dump(entry, f, indent=4, sort_keys=True)    
+
+def fullImport(tempFile):
+    """
+    Import an entry of password for updating
+    """
+    f = open(tempFile, 'r')
+    entry = json.load(f)
+    #   encrypt password before updating db
+    return entry
+
+def updateEntry(dbfile, cfgfile, id=None):
+    """
+    Update one entry
+    """
+    cfg = PassCfg('dontcare', cfgfile)
+    myeditor = cfg.get_config("OTHERS", "editor")
+    delay = cfg.get_config("OTHERS", "sleep")
+
+    db = Database(dbfile)
+    fp = tempfile.NamedTemporaryFile(delete_on_close=False)
+    tempFile = fp.name
+    id = int(id)
+    try:
+        entry = db['ACCOUNT'].get(id)
+    except Exception as e:
+        print(f"!!! Error: {e} occured \n    when getting id: {id} from Db: {dbfile} !!!")
+        print(f"!!!! Check if id: {id} exists in Db !!!!!")
+        sys.exit(89)
+    #   decrypt password before export to file
+    entry['password'] = DecryptPassword(entry['password'], cfgfile)
+    #   export enty to temp file for edit
+    #
+    fullExport(entry, tempFile)
+    print(f"\n\n --- Will open '{myeditor}' for updating in {delay} seconds ---\n\n")
+    os.system(f"sleep {delay}")
+    os.system(f"{myeditor} {tempFile}")
+    entry = fullImport(tempFile)
+    #os.system(f"unlink {tempFile}")
+    #   encrypt password before update db
+    entry['password'] = EncryptPassword(entry['password'], cfgfile)
+    db['ACCOUNT'].update(id, entry)
 
 def main(args):
     """ Main entry point of the app """
@@ -516,12 +568,14 @@ def main(args):
     random = args.random
     xkcd = args.xkcd
     remove = args.remove
+    update = args.update
     backup = args.backup
     query = args.query
     transcode = args.transcode
     editor = args.editor
     service = args.service
     username = args.username
+    id = args.id
     tag = args.tag
     note = args.note
 
@@ -542,6 +596,8 @@ def main(args):
         insertEntry(dbfile, cfgfile, random, xkcd, editor)
     if transcode:
         transcodeDb(dbfile, cfgfile)
+    if update:
+        updateEntry(dbfile, cfgfile, id)
 
 if __name__ == "__main__":
     
@@ -588,6 +644,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Delete entries by service, username and/or, tag")
     parser.add_argument(
+        "--update",
+        default=False,
+        action="store_true",
+        help="Update one entry -- must find it's id before involving this command")
+    parser.add_argument(
         "--backup",
         default=True,
         action = "store_false",
@@ -620,6 +681,10 @@ if __name__ == "__main__":
         default=False,
         action = "store_true",
         help="Export entries to files")
+    parser.add_argument(
+        "--id",
+        default=None,
+        help="Entry id for updating")
     parser.add_argument(
         "--service",
         default=None,
