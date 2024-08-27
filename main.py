@@ -15,6 +15,7 @@ import tempfile
 from configparser import ConfigParser
 from datetime import datetime
 from pathlib import Path
+from passwordGenerator import randomstyle, xkcdstyle
 from sqlite_utils import Database
 
 class PassCfg:
@@ -168,12 +169,10 @@ def EncryptPassword(data, cfgfile, transcode=False):
     Encrypt the given data/string of password with cipher
     '''
     home, keyring, recipients, symmetric, key = getGPGconfig(cfgfile)
-    print(f"----- Original symm value: {symmetric}")
     #   negate symmetric to achieve trancode
     #
     if transcode:
         symmetric = 'False' if symmetric=='True' else 'True'
-    print(f"----- Flipped symm value: {symmetric}")
     cipher = GPGCipher(home, keyring, recipients, symmetric)
     encoded = cipher.encrypt(data, key)
     #print(f"encrypting password: {data}")
@@ -445,14 +444,28 @@ def readFile(fileName):
         content = f.read()
     return content
     
-def insertEntry(dbfile, cfgfile, editor=False):
+def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     """
     Insert one entry to db
     """
-    if editor:
+    cfg = PassCfg('dontcare', cfgfile)
+    if random:
+        #   get length, punctuation from cfgfile
+        length = int(cfg.get_config("PASSWORD_PREFERENCE", "length"))
+        punctuation = True if cfg.get_config("PASSWORD_PREFERENCE", "punctuation") == 'True' else False
+        clear = randomstyle(length, punctuation)
+        print(f" --- random password from generator ---")
+    elif xkcd:
+        #   get numberwords, delimiter, case, dictionary from cfgfile
+        numberwords =  int(cfg.get_config("PASSWORD_PREFERENCE", "numberwords"))
+        delimiter = eval(cfg.get_config("PASSWORD_PREFERENCE", "delimiter"))
+        caseselection = cfg.get_config("PASSWORD_PREFERENCE", "caseselection")
+        dict = cfg.get_config("PASSWORD_PREFERENCE", "dictionary")
+        clear = xkcdstyle(numberwords, delimiter, caseselection, dict)
+        print(f" --- random password from xkcd generator ---")
+    elif editor:
         fp = tempfile.NamedTemporaryFile(delete_on_close=False)
         tempPwdFile = fp.name
-        cfg = PassCfg('dontcare', cfgfile)
         myeditor = cfg.get_config("OTHERS", "editor")
         delay = cfg.get_config("OTHERS", "sleep")
     date = f'{datetime.today():%Y-%m-%d}'
@@ -461,14 +474,15 @@ def insertEntry(dbfile, cfgfile, editor=False):
     print()
     username = input("Username: ")
     print()
-    if not editor:
+    if not random and not xkcd and not editor:
         clear = multilineInput("Password: ")
-    else:
+    elif not random and not xkcd and editor:
         print(f"\n\n --- Will open '{myeditor}' for creating password in {delay} seconds ---\n\n")
         os.system(f"sleep {delay}")
         os.system(f"{myeditor} {tempPwdFile}")
         clear = readFile(f"{tempPwdFile}")
         os.system(f"unlink {tempPwdFile}")
+    print(f"--- password: {clear} ---")
     password = EncryptPassword(clear, cfgfile)
     print()
     tag = input("Tag: ")
@@ -499,6 +513,8 @@ def main(args):
     importDir = args.importDir
     export = args.export
     insert = args.insert
+    random = args.random
+    xkcd = args.xkcd
     remove = args.remove
     backup = args.backup
     query = args.query
@@ -523,7 +539,7 @@ def main(args):
     if export:
         exportDb(dbfile)
     if insert:
-        insertEntry(dbfile, cfgfile, editor)
+        insertEntry(dbfile, cfgfile, random, xkcd, editor)
     if transcode:
         transcodeDb(dbfile, cfgfile)
 
@@ -551,10 +567,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Insert one entry to Db -- all input from keyboard")
     parser.add_argument(
+        "--random",
+        default=False,
+        action="store_true",
+        help="Use random string password for insert -- 1st priority")
+    parser.add_argument(
+        "--xkcd",
+        default=False,
+        action="store_true",
+        help="Use xkcd style random password for insert -- 2nd priority")
+    parser.add_argument(
         "--editor",
         default=False,
         action="store_true",
-        help="Use configured (in cfgfile) editor for inserting entry")
+        help="Use configured (in cfgfile) editor for inserting entry -- least priority")
     parser.add_argument(
         "--remove",
         "--delete",
