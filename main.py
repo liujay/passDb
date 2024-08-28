@@ -503,17 +503,15 @@ def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
     db['ACCOUNT'].insert(entry) 
 
-def fullExport(entry, tempFile):
+def entry2jsonFile(entry, tempFile):
     """
     Export decoded password entry to a json file for editing
         id was removed before export
     """
-    #   hide entry's id -- no update on this column
-    del entry['id']
     with open(tempFile, 'w') as f:
         json.dump(entry, f, indent=4, sort_keys=True)    
 
-def fullImport(tempFile):
+def jsonFile2entry(tempFile):
     """
     Import an entry of password for updating
     """
@@ -540,16 +538,26 @@ def updateEntry(dbfile, cfgfile, id=None):
         print(f"!!! Error: {e} occured \n    when getting id: {id} from Db: {dbfile} !!!")
         print(f"!!!! Check if id: {id} exists in Db !!!!!")
         sys.exit(89)
+    #   make a copy/backup before updating
+    #       creat dir if not exist
+    copyDirName = '_copy'
+    try:
+        os.makedirs(copyDirName)
+    except FileExistsError:
+        pass
+    copyFileName = f"{entry['id']}_{entry['service'].strip()}_{entry['username'].strip()}.json"
+    entry2jsonFile(entry, f"{copyDirName}/{copyFileName}")
     #   decrypt password before export to file
     entry['password'] = DecryptPassword(entry['password'], cfgfile)
-    #   export enty to temp file for edit
-    #
-    fullExport(entry, tempFile)
+    #   hide entry's id -- no update on this column
+    del entry['id']
+    #   export enty to temp/json file for edit
+    entry2jsonFile(entry, tempFile)
     print(f"\n\n --- Will open '{myeditor}' for updating in {delay} seconds ---\n\n")
     os.system(f"sleep {delay}")
     os.system(f"{myeditor} {tempFile}")
-    entry = fullImport(tempFile)
-    #os.system(f"unlink {tempFile}")
+    entry = jsonFile2entry(tempFile)
+    os.system(f"unlink {tempFile}")
     #   encrypt password before update db
     entry['password'] = EncryptPassword(entry['password'], cfgfile)
     db['ACCOUNT'].update(id, entry)
