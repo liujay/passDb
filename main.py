@@ -343,9 +343,10 @@ def transcodeDb(dbfile, cfgfile):
     #   Remind user to update cfgfile
     print(f"\n\n!!! Be sure to update {cfgfile} before run!!!\n\n")
 
-def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False):
+def buildWhereClause(id=None, service=None, username=None, tag=None):
     """
-    Query on id, service, username or tag
+    Build the where clause for search/query
+        -- for search and delete query
     """
     if id:
         whereClause = f"where id='{id}'"
@@ -362,11 +363,22 @@ def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, show
     elif tag:
         whereClause = f"where tag like '%{tag}%'"
     else:
-        print(f"--- No support on query with: ---")
+        print(f"--- No support on query on: ---")
+        print(f"    id: {id}")
         print(f"    service: {service}")
         print(f"    username: {username}")
         print(f"    tag: {tag}")
-        return 
+        return None
+    return whereClause
+
+def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False):
+    """
+    Search on id, service, username and/or tag
+    """
+    whereClause = buildWhereClause(id, service, username, tag)
+    if not whereClause:
+        #   invalid whereClause, ie, no support for what were given
+        return None
     selectPrefix = f"select * from ACCOUNT"
     myQuery = f"{selectPrefix} {whereClause}"
     print(f"\nquery: {myQuery}\n")
@@ -375,25 +387,15 @@ def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, show
     results = [x for x in _results]
     displayResults(results, cfgfile, showpassword)
 
-def delete(dbfile, cfgfile, service=None, username=None, tag=None, showpassword=False, backup=False, backupDir='./_DELETED'):
+def deleteEntries(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False, backup=False, backupDir='./_DELETED'):
     """
-    Query on service, username or tag
+    Delete on id, service, username and/or tag
     """
     deleted = []
-    if service and username and tag:
-        whereClause = f"where service='{service}' and username='{username}' and tag like '%{tag}%'"
-    elif service and username:
-        whereClause = f"where service='{service}' and username='{username}'"
-    elif service:
-        whereClause = f"where service like '%{service}%'"
-    elif tag:
-        whereClause = f"where tag like '%{tag}%'"
-    else:
-        print(f"--- No support on remove with: ---")
-        print(f"    service: {service}")
-        print(f"    username: {username}")
-        print(f"    tag: {tag}")
-        return 
+    whereClause = buildWhereClause(id, service, username, tag)
+    if not whereClause:
+        #   invalid whereClause, ie, nothing to delete
+        return deleted
     selectPrefix = f"select * from ACCOUNT"
     myQuery = f"{selectPrefix} {whereClause}"
     print(f"\nquery: {myQuery}\n")
@@ -410,7 +412,7 @@ def delete(dbfile, cfgfile, service=None, username=None, tag=None, showpassword=
     print(f"\n--- Found {len(results)} entries to DELETE ---")
     print(f"Let's do it one entry at a time ...\n")
     for e in results:
-        print(f"DELETE: {e['service']:30} {e['username']:20} {e['tag']:20} {e['note']}\n")
+        print(f"DELETE: {e['id']:3}: {e['service']:30} {e['username']:20} {e['tag']:20} {e['note']}\n")
         selection = input(f"Yes/No ? ")
         if selection and selection[0].lower() == 'y':
             print(f"!!! DELETING entry: {e['service']} !!!\n")
@@ -595,7 +597,7 @@ def main(args):
     if query:
         search(dbfile, cfgfile, id, service, username, tag, showpassword)
     if remove:
-        deleted = delete(dbfile, cfgfile, service, username, tag, showpassword, backup)
+        deleteEntries(dbfile, cfgfile, id, service, username, tag, showpassword, backup)
     if importFile:
         fileImport(dbfile, cfgfile, importFile, username, tag, note)
     if importDir:
@@ -624,6 +626,7 @@ if __name__ == "__main__":
         help="File name of the configuration")
     parser.add_argument("-q",
         "--query",
+        "--search",
         default=False,
         action="store_true",
         help="Query on service, username and/or, tag")
