@@ -343,11 +343,13 @@ def transcodeDb(dbfile, cfgfile):
     #   Remind user to update cfgfile
     print(f"\n\n!!! Be sure to update {cfgfile} before run!!!\n\n")
 
-def search(dbfile, cfgfile, service=None, username=None, tag=None, showpassword=False):
+def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False):
     """
-    Query on service, username or tag
+    Query on id, service, username or tag
     """
-    if service and username and tag:
+    if id:
+        whereClause = f"where id='{id}'"
+    elif service and username and tag:
         whereClause = f"where service='{service}' and username='{username}' and tag like '%{tag}%'"
     elif service and username:
         whereClause = f"where service='{service}' and username='{username}'"
@@ -591,7 +593,7 @@ def main(args):
     if show:
         showAll(dbfile, cfgfile, showpassword)
     if query:
-        search(dbfile, cfgfile, service, username, tag, showpassword)
+        search(dbfile, cfgfile, id, service, username, tag, showpassword)
     if remove:
         deleted = delete(dbfile, cfgfile, service, username, tag, showpassword, backup)
     if importFile:
