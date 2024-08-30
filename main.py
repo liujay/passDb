@@ -230,6 +230,26 @@ def showAll(dbfile, cfgfile=None, showpassword=False):
     results = db.query("select * from ACCOUNT")
     displayResults(results, cfgfile, showpassword)
 
+def insertEntry(dbfile, service, password, username=None, tag=None, note=None, dir=None):
+    """
+    Compose and insert one entry to Db
+    """
+    entry = {}
+    date = f'{datetime.today():%Y-%m-%d}'
+    entry["service"] = service.strip()
+    entry["username"] = username.strip() if username else 'Import'
+    entry["password"] = password
+
+    entry["tag"] = tag.strip()
+    #   setup note
+    entry["note"] = f"Imported on {date}, {note}".strip() if note else f"Imported on {date}"
+    #   insert to Db
+    db = Database(dbfile)
+    print(f"--- insert following entry to DB {dbfile}")
+    print(f"  service      username       tag         note")
+    print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
+    db['ACCOUNT'].insert(entry) 
+    
 def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=None):
     """
     Import one pwd file to db
@@ -237,39 +257,30 @@ def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=Non
         -- datafile like service.gpg
     """
     #   check if datafile with extention '.gpg'
-    dirName = os.path.dirname(datafile)
+    _dirName = os.path.dirname(datafile)
     filename = os.path.basename(datafile)
-    name, ext = os.path.splitext(filename)
-    if ext == '.gpg':
-        entry = {}
-        date = f'{datetime.today():%Y-%m-%d}'
+    service, ext = os.path.splitext(filename)
+    if service[0] == '.':
+        print(f"!!! Ignore dot file: {filename} !!!")
+        return None
+    elif ext == '.gpg':
         clear = DecryptPassword(datafile, cfgfile, file=True)
-        password = EncryptPassword(clear, cfgfile)
-        #   compose values for row
-        #
-        entry["service"] = name
-        entry["username"] = username if username else 'Import'
-        entry["password"] = password
-        #   set up proper tag
-        if dir:
-            #   remove prefix/dir, suffix/filename, then find tag
-            importTag = datafile.replace(dir, '').replace(filename, '').replace('/', ' ').strip()
-            #   add import and option tag
-            importTag = f"{tag} {importTag}" if tag else f"{importTag}"
-        else:
-            importTag = tag if tag else "noTag"
-        entry["tag"] = importTag.strip()
-        #   setup note
-        entry["note"] = f"Imported on {date}, {note}".strip() if note else f"Imported on {date}"
-        #   insert to Db
-        db = Database(dbfile)
-        print(f"--- insert following entry to DB {dbfile}")
-        print(f"  service      username       tag         note")
-        print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
-        db['ACCOUNT'].insert(entry) 
+    else:   # others are assumed to be clear file
+        print(f"  ! Treat file {datafile} as a clear file !")
+        clear = readFile(datafile)
+    password = EncryptPassword(clear, cfgfile)
+    #   set up proper tag
+    #
+    if dir:
+        #   remove prefix/dir, suffix/filename, then find tag
+        myTag = datafile.replace(dir, '').replace(filename, '').replace('/', ' ').strip()
+        #   add import and option tag
+        myTag = f"{tag} {myTag}" if tag else f"{myTag}"
     else:
-        print(f"----- imported file {datafile} without extention .gpg -----")
-        sys.exit(98)
+        myTag = tag if tag else "noTag"
+    #   insert to Db
+    insertEntry(dbfile, service, password, username, myTag, note)
+    return True
 
 def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
     """
@@ -290,10 +301,8 @@ def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
             datafile = f"{root}/{file}"
             print(f"Processing file: {datafile}")
             name, ext = os.path.splitext(file)
-            if ext == '.gpg':
-                fileImport(dbfile, cfgfile, datafile, username, tag, note, directory)
-            else:
-                print(f"    skipping file {file} -- not gpg file")
+            fileImport(dbfile, cfgfile, datafile, username, tag, note, directory)
+
 
 def exportEntry(entry, root=None):
     """
@@ -446,13 +455,13 @@ def readFile(fileName):
     """
     read and return text from file
     """
-    with open(fileName, 'r') as f:
+    with open(fileName, 'rb') as f:
         content = f.read()
     return content
     
-def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
+def inputEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     """
-    Insert one entry to db
+    Insert one entry to db -- input by user mostly interactively
     """
     cfg = PassCfg('dontcare', cfgfile)
     if random:
@@ -486,6 +495,10 @@ def insertEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
         print(f"\n\n --- Will open '{myeditor}' for creating password in {delay} seconds ---\n\n")
         os.system(f"sleep {delay}")
         os.system(f"{myeditor} {tempPwdFile}")
+        #   looks like vi (and other editor?) adds newline at EOF
+        #       let's take care of this
+        if myeditor in ['vi', 'vim']:
+            os.system(f"truncate -s -1 {tempPwdFile}")
         clear = readFile(f"{tempPwdFile}")
         os.system(f"unlink {tempPwdFile}")
     print(f"--- password: {clear} ---")
@@ -605,7 +618,7 @@ def main(args):
     if export:
         exportDb(dbfile)
     if insert:
-        insertEntry(dbfile, cfgfile, random, xkcd, editor)
+        inputEntry(dbfile, cfgfile, random, xkcd, editor)
     if transcode:
         transcodeDb(dbfile, cfgfile)
     if update:
