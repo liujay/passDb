@@ -52,7 +52,7 @@ class PassCfg:
                 return value
         except (OSError, IOError) as e:
             raise Exception("Couldn't find path to config.ini.") from e
-        
+
     def list_config(self):
         config_file_path = self.configfile
         config = ConfigParser()
@@ -103,11 +103,11 @@ def getGPGconfig(cfgfile):
     keyring = cfg.get_config("GPG", "keyring")
     recipients = cfg.get_config("GPG", "recipients")
     symmetric_encryption = cfg.get_config("GPG", "symmetric_encryption")
-    key = cfg.get_config("ENCRYPTION_KEY", "key")
+    key = ast.literal_eval(cfg.get_config("ENCRYPTION_KEY", "key"))
     return gnupg_home, keyring, recipients, symmetric_encryption, key
 
 class GPGCipher(object):
-    def __init__(self, gnupghome=None, keyring=None, recipients=None, symmetric=None): 
+    def __init__(self, gnupghome=None, keyring=None, recipients=None, symmetric=None):
         self.gnupghome = os.path.expanduser(gnupghome)
         self.keyring = keyring
         self.recipients = recipients
@@ -115,7 +115,7 @@ class GPGCipher(object):
 
     def __repr__(self):
         return f"<GPGhome: {self.gnupghome}>\n<Keyring: {self.keyring}>"
- 
+
     def encrypt(self, data, passphrase=None):
         if self.gnupghome:
             cipher = gnupg.GPG(gnupghome=self.gnupghome, keyring=self.keyring)
@@ -154,7 +154,7 @@ class GPGCipher(object):
                 open(data, 'rb'),
                 passphrase = passphrase
             )
-        else: 
+        else:
             clear = cipher.decrypt(
                 data,
                 passphrase = passphrase
@@ -165,7 +165,7 @@ class GPGCipher(object):
             print(f"decription error with status: {clear.status}")
             print(f"  !!! Check if key cache expired !!!")
             sys.exit(97)
-    
+
 def EncryptPassword(data, cfgfile, transcode=False):
     '''
     Encrypt the given data/string of password with cipher
@@ -189,7 +189,7 @@ def DecryptPassword(data, cfgfile, file=None):
     #print(f"\n----- cipher: {cipher.__repr__} -----\n")
     if file:
         clear = cipher.decrypt(data, key, file=True)
-    else:    
+    else:
         clear = cipher.decrypt(data, key)
     #print(f"decrypting password: {clear}")
     return clear
@@ -208,7 +208,7 @@ def displayResults(results, cfgfile=None, showpassword=False):
         for r in results:
             #   convert null value to string '---Null---'
             for col in ['id', 'service', 'username', 'tag', 'note']:
-                r[col] = r[col] if r[col] else '-- Null --' 
+                r[col] = r[col] if r[col] else '-- Null --'
             print(f"{r['id']:3}:: {r['service']}:: {r['username']}:: {r['tag']}:: {r['note']}")
             if showpassword and cfgfile:
                 password = DecryptPassword(r['password'], cfgfile)
@@ -248,8 +248,8 @@ def insertEntry(dbfile, service, password, username=None, tag=None, note=None, d
     print(f"--- insert following entry to DB {dbfile}")
     print(f"  service      username       tag         note")
     print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
-    db['ACCOUNT'].insert(entry) 
-    
+    db['ACCOUNT'].insert(entry)
+
 def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=None):
     """
     Import one pwd file to db
@@ -294,7 +294,7 @@ def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
     if not os.path.isdir(directory):
         print(f"----- {directory} is NOT a directory, see you next time ... -----")
         sys.exit(99)
-    
+
     #   walk thru all files in directory and process
     for root, _dirs, files in os.walk(directory):
         for file in files:
@@ -458,7 +458,7 @@ def readFile(fileName):
     with open(fileName, 'rb') as f:
         content = f.read()
     return content
-    
+
 def inputEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     """
     Insert one entry to db -- input by user mostly interactively
@@ -518,7 +518,7 @@ def inputEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     print(f"--- insert following entry to DB {dbfile}")
     print(f"  service      username       tag         note")
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
-    db['ACCOUNT'].insert(entry) 
+    db['ACCOUNT'].insert(entry)
 
 def entry2jsonFile(entry, tempFile):
     """
@@ -526,7 +526,7 @@ def entry2jsonFile(entry, tempFile):
         id was removed before export
     """
     with open(tempFile, 'w') as f:
-        json.dump(entry, f, indent=4, sort_keys=True)    
+        json.dump(entry, f, indent=4, sort_keys=True)
 
 def jsonFile2entry(tempFile):
     """
@@ -625,7 +625,7 @@ def main(args):
         updateEntry(dbfile, cfgfile, id)
 
 if __name__ == "__main__":
-    
+
     """ This is executed when run from the command line """
     parser = argparse.ArgumentParser(description="Application description")
 
