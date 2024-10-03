@@ -110,7 +110,7 @@ def getGPGconfig(cfgfile):
     keyring = cfg.get_config("GPG", "keyring")
     recipients = cfg.get_config("GPG", "recipients")
     symmetric_encryption = cfg.get_config("GPG", "symmetric_encryption")
-    key = cfg.get_config("ENCRYPTION_KEY", "key")
+    key = ast.literal_eval(cfg.get_config("ENCRYPTION_KEY", "key"))
     return gnupg_home, keyring, recipients, symmetric_encryption, key
 
 class GPGCipher(object):
@@ -223,22 +223,6 @@ def displayResults(results, cfgfile=None, showpassword=False):
     else:
         print(f"--- Empty result ---")
 
-@app.command()
-def init(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
-    my_pass = PassCfg(dbfile, cfgfile)
-    if listcfg :
-        my_pass.list_config()
-    my_pass.check_table()
-
-@app.command()
-def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False):
-    """
-    Display all entries in dbfile
-    """
-    db = Database(dbfile)
-    results = db.query("select * from ACCOUNT")
-    displayResults(results, cfgfile, showpassword)
-
 def insertEntry(dbfile, service, password, username=None, tag=None, note=None, dir=None):
     """
     Compose and insert one entry to Db
@@ -258,13 +242,136 @@ def insertEntry(dbfile, service, password, username=None, tag=None, note=None, d
     print(f"  service      username       tag         note")
     print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
     db['ACCOUNT'].insert(entry) 
-    
-def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=None):
+
+def exportEntry(entry, root=None):
+    """
+    Export one entry to a file where
+        dir is composed from tag, and
+        baseame is service
+    """
+    dirs = re.split(r'\s+', entry['tag'].strip())
+    dir = '/'.join(dirs)
+    if root:
+        dir = f"{root}/{dir}"
+    filename = f"{dir}/{entry['service']}.gpg"
+    print(f"entry id: {entry['id']}, service: {'service'}, tag: {entry['tag']}")
+    print(f"exporting entry to file: {filename}")
+    #   creat dir if not exist
+    try:
+        os.makedirs(dir)
+    except FileExistsError:
+        pass
+    if type(entry['password']) is str:
+        with open(filename, "w") as f:
+            f.write(entry['password'])
+    else:
+        print(f"--- skip entry['service'] with password of type {type(entry['password'])} ---")
+
+def buildWhereClause(id=None, service=None, username=None, tag=None):
+    """
+    Build the where clause for search/query
+        -- for search and delete query
+    """
+    if id:
+        whereClause = f"where id='{id}'"
+    elif service and username and tag:
+        whereClause = f"where service='{service}' and username='{username}' and tag like '%{tag}%'"
+    elif service and username:
+        whereClause = f"where service='{service}' and username='{username}'"
+    elif service and tag:
+        whereClause = f"where service='{service}' and tag like '%{tag}%'"
+    elif username and tag:
+        whereClause = f"where username like '%{username}%' and tag like '%{tag}%'"
+    elif service:
+        whereClause = f"where service like '%{service}%'"
+    elif username:
+        whereClause = f"where username like '%{username}%'"
+    elif tag:
+        whereClause = f"where tag like '%{tag}%'"
+    else:
+        print(f"--- No support on query on: ---")
+        print(f"    id: {id}")
+        print(f"    service: {service}")
+        print(f"    username: {username}")
+        print(f"    tag: {tag}")
+        return None
+    return whereClause
+
+def multilineInput(opening='content'):
+    """
+    Take multiple lines input
+    """
+    print(opening)
+    print(f"Enter/Paste your {opening}. Ctrl-D or Ctrl-Z (windows?) to save it.")
+    lines = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        lines.append(line)
+    #   combine all lines to one sting
+    result = f"{'\n'.join(lines)}"
+    return result
+
+def readFile(fileName):
+    """
+    read and return text from file
+    """
+    with open(fileName, 'rb') as f:
+        content = f.read()
+    return content
+
+def entry2jsonFile(entry, tempFile):
+    """
+    Export decoded password entry to a json file for editing
+        id was removed before export
+    """
+    with open(tempFile, 'w') as f:
+        json.dump(entry, f, indent=4, sort_keys=True)    
+
+def jsonFile2entry(tempFile):
+    """
+    Import an entry of password for updating
+    """
+    f = open(tempFile, 'r')
+    entry = json.load(f)
+    #   encrypt password before updating db
+    return entry
+
+@app.command()
+def init(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
+    """
+    Initialize ACCOUNT table if it does not exist, and
+    list config file
+    """
+    my_pass = PassCfg(dbfile, cfgfile)
+    if listcfg :
+        my_pass.list_config()
+    my_pass.check_table()
+
+@app.command()
+def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False):
+    """
+    Display all entries in dbfile
+    """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
+    db = Database(dbfile)
+    results = db.query("select * from ACCOUNT")
+    displayResults(results, cfgfile, showpassword)
+
+@app.command()    
+def fileimport(datafile: str,
+        dbfile: str='database.db', cfgfile: str='config.ini', 
+        username: str='', tag: str='', note: str='', dir: str=''):
     """
     Import one pwd file to db
         -- no check on exist or not
         -- datafile like service.gpg
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     #   check if datafile with extention '.gpg'
     _dirName = os.path.dirname(datafile)
     filename = os.path.basename(datafile)
@@ -291,12 +398,17 @@ def fileImport(dbfile, cfgfile, datafile, username, tag=None, note=None, dir=Non
     insertEntry(dbfile, service, password, username, myTag, note)
     return True
 
-def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
+@app.command()
+def dirimport(directory: str,
+        dbfile: str='database.db', cfgfile: str='config.ini', 
+        username: str='', tag: str='', note: str=''):
     """
     Import one pwd file to db
         -- no check on exist or not
         -- datafile like service.gpg
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     #   expand directory
     directory = os.path.expanduser(directory)
     #   check if directory is real
@@ -310,46 +422,28 @@ def dirImport(dbfile, cfgfile, directory, username, tag=None, note=None):
             datafile = f"{root}/{file}"
             print(f"Processing file: {datafile}")
             name, ext = os.path.splitext(file)
-            fileImport(dbfile, cfgfile, datafile, username, tag, note, directory)
+            fileimport(datafile, dbfile, cfgfile, username, tag, note, directory)
 
 
-def exportEntry(entry, root=None):
-    """
-    Export one entry to a file where
-        dir is composed from tag, and
-        baseame is service
-    """
-    dirs = re.split(r'\s+', entry['tag'].strip())
-    dir = '/'.join(dirs)
-    if root:
-        dir = f"{root}/{dir}"
-    filename = f"{dir}/{entry['service']}.gpg"
-    print(f"entry id: {entry['id']}, service: {'service'}, tag: {entry['tag']}")
-    print(f"exporting entry to file: {filename}")
-    #   creat dir if not exist
-    try:
-        os.makedirs(dir)
-    except FileExistsError:
-        pass
-    if type(entry['password']) is str:
-        with open(filename, "w") as f:
-            f.write(entry['password'])
-    else:
-        print(f"--- skip entry['service'] with password of type {type(entry['password'])} ---")
-
-def exportDb(dbfile, directory='_Export'):
+@app.command()
+def exportdb(dbfile: str='database.db', directory: str='_Export'):
     """
     export all passwords to files live in {directory}
     """
+    init(dbfile=dbfile)
+
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
         exportEntry(entry, directory)
 
-def transcodeDb(dbfile, cfgfile):
+@app.command()
+def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
     """
     Convert pub <--> symmetirc key encryption
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         clear = DecryptPassword(entry['password'], cfgfile)
@@ -359,40 +453,17 @@ def transcodeDb(dbfile, cfgfile):
         db['ACCOUNT'].update(entry['id'], {'password': password})
     #
     #   Remind user to update cfgfile
-    print(f"\n\n!!! Be sure to update {cfgfile} before run!!!\n\n")
+    print(f"\n\n!!! Be sure to update {cfgfile} before next run!!!\n\n")
 
-def buildWhereClause(id=None, service=None, username=None, tag=None):
-    """
-    Build the where clause for search/query
-        -- for search and delete query
-    """
-    if id:
-        whereClause = f"where id='{id}'"
-    elif service and username and tag:
-        whereClause = f"where service='{service}' and username='{username}' and tag like '%{tag}%'"
-    elif service and username:
-        whereClause = f"where service='{service}' and username='{username}'"
-    elif service and tag:
-        whereClause = f"where service='{service}' and tag like '%{tag}%'"
-    elif username and tag:
-        whereClause = f"where username like '%{username}%' and tag like '%{tag}%'"
-    elif service:
-        whereClause = f"where service like '%{service}%'"
-    elif tag:
-        whereClause = f"where tag like '%{tag}%'"
-    else:
-        print(f"--- No support on query on: ---")
-        print(f"    id: {id}")
-        print(f"    service: {service}")
-        print(f"    username: {username}")
-        print(f"    tag: {tag}")
-        return None
-    return whereClause
-
-def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False):
+@app.command()
+def search(dbfile: str='database.db', cfgfile: str='config.ini', 
+           id: str='', service: str='', username: str='', tag: str='', 
+           showpassword: bool=False):
     """
     Search on id, service, username and/or tag
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
         #   invalid whereClause, ie, no support for what were given
@@ -405,10 +476,15 @@ def search(dbfile, cfgfile, id=None, service=None, username=None, tag=None, show
     results = [x for x in _results]
     displayResults(results, cfgfile, showpassword)
 
-def deleteEntries(dbfile, cfgfile, id=None, service=None, username=None, tag=None, showpassword=False, backup=False, backupDir='./_DELETED'):
+@app.command()
+def remove(dbfile: str='database.db', cfgfile: str='config.ini', 
+           id: str='', service: str='', username: str='', tag: str='', 
+           showpassword: bool=False, backup: bool=True, backupDir: str='./_DELETED'):
     """
     Delete on id, service, username and/or tag
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     deleted = []
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
@@ -443,35 +519,15 @@ def deleteEntries(dbfile, cfgfile, id=None, service=None, username=None, tag=Non
     #   keep the deleted entries, just in case
     return deleted
 
-def multilineInput(opening='content'):
-    """
-    Take multiple lines input
-    """
-    print(opening)
-    print(f"Enter/Paste your {opening}. Ctrl-D or Ctrl-Z (windows?) to save it.")
-    lines = []
-    while True:
-        try:
-            line = input()
-        except EOFError:
-            break
-        lines.append(line)
-    #   combine all lines to one sting
-    result = f"{'\n'.join(lines)}"
-    return result
 
-def readFile(fileName):
-    """
-    read and return text from file
-    """
-    with open(fileName, 'rb') as f:
-        content = f.read()
-    return content
-    
-def inputEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
+@app.command()    
+def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
+               random: bool=False, xkcd: bool=False, editor: bool=False):
     """
     Insert one entry to db -- input by user mostly interactively
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     cfg = PassCfg('dontcare', cfgfile)
     if random:
         #   get length, punctuation from cfgfile
@@ -529,27 +585,14 @@ def inputEntry(dbfile, cfgfile, random=False, xkcd=False, editor=False):
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
     db['ACCOUNT'].insert(entry) 
 
-def entry2jsonFile(entry, tempFile):
-    """
-    Export decoded password entry to a json file for editing
-        id was removed before export
-    """
-    with open(tempFile, 'w') as f:
-        json.dump(entry, f, indent=4, sort_keys=True)    
-
-def jsonFile2entry(tempFile):
-    """
-    Import an entry of password for updating
-    """
-    f = open(tempFile, 'r')
-    entry = json.load(f)
-    #   encrypt password before updating db
-    return entry
-
-def updateEntry(dbfile, cfgfile, id=None):
+@app.command()
+def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
+            id: str=''):
     """
     Update one entry
     """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
     cfg = PassCfg('dontcare', cfgfile)
     myeditor = cfg.get_config("OTHERS", "editor")
     delay = cfg.get_config("OTHERS", "sleep")
@@ -588,173 +631,5 @@ def updateEntry(dbfile, cfgfile, id=None):
     entry['password'] = EncryptPassword(entry['password'], cfgfile)
     db['ACCOUNT'].update(id, entry)
 
-def main(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
-    init(dbfile=dbfile, cfgfile=cfgfile, listcfg=listcfg)
-    showAll(dbfile=dbfile, cfgfile=cfgfile, showpassword=False)
-    #app(dbfile=dbfile, cfgfile=cfgfile)
-    app()
-
-'''
-    """ Main entry point of the app """
-    print(args)
-    dbfile = args.dbfile
-    cfgfile = args.cfgfile
-    show = args.show
-    showpassword = args.showpassword
-    importFile = args.importFile
-    importDir = args.importDir
-    export = args.export
-    insert = args.insert
-    random = args.random
-    xkcd = args.xkcd
-    remove = args.remove
-    update = args.update
-    backup = args.backup
-    query = args.query
-    transcode = args.transcode
-    editor = args.editor
-    service = args.service
-    username = args.username
-    id = args.id
-    tag = args.tag
-    note = args.note
-
-    init(dbfile, cfgfile)
-    if show:
-        showAll(dbfile, cfgfile, showpassword)
-    if query:
-        search(dbfile, cfgfile, id, service, username, tag, showpassword)
-    if remove:
-        deleteEntries(dbfile, cfgfile, id, service, username, tag, showpassword, backup)
-    if importFile:
-        fileImport(dbfile, cfgfile, importFile, username, tag, note)
-    if importDir:
-        dirImport(dbfile, cfgfile, importDir, username, tag, note)
-    if export:
-        exportDb(dbfile)
-    if insert:
-        inputEntry(dbfile, cfgfile, random, xkcd, editor)
-    if transcode:
-        transcodeDb(dbfile, cfgfile)
-    if update:
-        updateEntry(dbfile, cfgfile, id)
-'''
-
-
 if __name__ == "__main__":
     app()
-
-'''
-
-    """ This is executed when run from the command line """
-    parser = argparse.ArgumentParser(description="Application description")
-
-    parser.add_argument("-d",
-        "--dbfile",
-        default="database.db",
-        help="File name of the database")
-    parser.add_argument("-c",
-        "--cfgfile",
-        default="config.ini",
-        help="File name of the configuration")
-    parser.add_argument("-q",
-        "--query",
-        "--search",
-        default=False,
-        action="store_true",
-        help="Query on service, username and/or, tag")
-    parser.add_argument(
-        "--insert",
-        default=False,
-        action="store_true",
-        help="Insert one entry to Db -- all input from keyboard")
-    parser.add_argument(
-        "--random",
-        default=False,
-        action="store_true",
-        help="Use random string password for insert -- 1st priority")
-    parser.add_argument(
-        "--xkcd",
-        default=False,
-        action="store_true",
-        help="Use xkcd style random password for insert -- 2nd priority")
-    parser.add_argument(
-        "--editor",
-        default=False,
-        action="store_true",
-        help="Use configured (in cfgfile) editor for inserting entry -- least priority")
-    parser.add_argument(
-        "--remove",
-        "--delete",
-        default=False,
-        action="store_true",
-        help="Delete entries by service, username and/or, tag")
-    parser.add_argument(
-        "--update",
-        default=False,
-        action="store_true",
-        help="Update one entry -- must find it's id before involving this command")
-    parser.add_argument(
-        "--backup",
-        default=True,
-        action = "store_false",
-        help="Backup on remove -- Default to True")
-    parser.add_argument(
-        "--transcode",
-        default=False,
-        action = "store_true",
-        help="Switch password encryption  PUB-key <--> Symm-key")
-    parser.add_argument(
-        "--show",
-        default=False,
-        action="store_true",
-        help="Show all entries")
-    parser.add_argument(
-        "--showpassword",
-        default=False,
-        action="store_true",
-        help="Show password when display")
-    parser.add_argument(
-        "--importDir",
-        default=None,
-        help="Directory name for import")
-    parser.add_argument(
-        "--importFile",
-        default=None,
-        help="File name for import")
-    parser.add_argument(
-        "--export",
-        default=False,
-        action = "store_true",
-        help="Export entries to files")
-    parser.add_argument(
-        "--id",
-        default=None,
-        help="Entry id for updating")
-    parser.add_argument(
-        "--service",
-        default=None,
-        help="Default service name")
-    parser.add_argument("-u",
-        "--username",
-        default=None,
-        help="Default username")
-    parser.add_argument("-t",
-        "--tag",
-        default=None,
-        help="Default tag")
-    parser.add_argument("-n",
-        "--note",
-        default=None,
-        help="Default note")
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        action="count",
-        default=0,
-        help="Verbosity (-v, -vv, etc)")
-
-    args = parser.parse_args()
-    main(args)
-
-'''
