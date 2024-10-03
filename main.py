@@ -20,6 +20,13 @@ from pathlib import Path
 from passwordGenerator import randomstyle, xkcdstyle
 from sqlite_utils import Database
 
+'''
+Use typer for v2
+'''
+import typer
+
+app = typer.Typer()
+
 class PassCfg:
     def __init__(self, dbfile, configfile, verbose=False):
         self.db = dbfile
@@ -216,13 +223,15 @@ def displayResults(results, cfgfile=None, showpassword=False):
     else:
         print(f"--- Empty result ---")
 
-def init(dbfile, cfgfile, listcfg=True):
+@app.command()
+def init(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
     my_pass = PassCfg(dbfile, cfgfile)
     if listcfg :
         my_pass.list_config()
     my_pass.check_table()
 
-def showAll(dbfile, cfgfile=None, showpassword=False):
+@app.command()
+def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False):
     """
     Display all entries in dbfile
     """
@@ -579,7 +588,13 @@ def updateEntry(dbfile, cfgfile, id=None):
     entry['password'] = EncryptPassword(entry['password'], cfgfile)
     db['ACCOUNT'].update(id, entry)
 
-def main(args):
+def main(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
+    init(dbfile=dbfile, cfgfile=cfgfile, listcfg=listcfg)
+    showAll(dbfile=dbfile, cfgfile=cfgfile, showpassword=False)
+    #app(dbfile=dbfile, cfgfile=cfgfile)
+    app()
+
+'''
     """ Main entry point of the app """
     print(args)
     dbfile = args.dbfile
@@ -623,9 +638,14 @@ def main(args):
         transcodeDb(dbfile, cfgfile)
     if update:
         updateEntry(dbfile, cfgfile, id)
+'''
+
 
 if __name__ == "__main__":
-    
+    app()
+
+'''
+
     """ This is executed when run from the command line """
     parser = argparse.ArgumentParser(description="Application description")
 
@@ -737,4 +757,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     main(args)
 
-
+'''
