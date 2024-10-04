@@ -431,16 +431,39 @@ def dirimport(directory: str,
 
 
 @app.command()
-def exportdb(dbfile: str='database.db', directory: str='_Export'):
+def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
+             directory: str='_Export'):
     """
     export all passwords to files live in {directory}
     """
-    init(dbfile=dbfile)
+    init(dbfile=dbfile, cfgfile=cfgfile)
 
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
         exportEntry(entry, directory)
+
+@app.command()
+def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
+                id: str='', directory: str='_Export'):
+    """
+    Export one entry by id
+    """
+    init(dbfile=dbfile, cfgfile=cfgfile)
+
+    db = Database(dbfile)
+    #   get the entry by id
+    id = int(id)
+    try:
+        entry = db['ACCOUNT'].get(id)
+    except Exception as e:
+        print(f"!!! Error: {e} occured \n    when getting id: {id} from Db: {dbfile} !!!")
+        print(f"!!!! Check if id: {id} exists in Db !!!!!")
+        sys.exit(89)
+    #   real job -- export
+    print(entry)
+    exportEntry(entry, directory)
+
 
 @app.command()
 def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
