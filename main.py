@@ -253,7 +253,10 @@ def exportEntry(entry, root=None):
     dir = '/'.join(dirs)
     if root:
         dir = f"{root}/{dir}"
-    filename = f"{dir}/{entry['service']}.gpg"
+    #   take care of '/' in service that was used as basename of file
+    #       eg, someone uses "https://any.com/app" as service name
+    basename = entry['service'].replace('/','_')
+    filename = f"{dir}/{basename}.gpg"
     print(f"entry id: {entry['id']}, service: {'service'}, tag: {entry['tag']}")
     print(f"exporting entry to file: {filename}")
     #   creat dir if not exist
@@ -364,13 +367,15 @@ def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: 
 @app.command()    
 def fileimport(datafile: str,
         dbfile: str='database.db', cfgfile: str='config.ini', 
-        username: str='', tag: str='', note: str='', dir: str=''):
+        username: str='', tag: str='', note: str='', dir: str='',
+        initdb: bool=True):
     """
     Import one pwd file to db
         -- no check on exist or not
         -- datafile like service.gpg
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
+    if initdb:
+        init(dbfile=dbfile, cfgfile=cfgfile)
 
     #   check if datafile with extention '.gpg'
     _dirName = os.path.dirname(datafile)
@@ -417,12 +422,12 @@ def dirimport(directory: str,
         sys.exit(99)
     
     #   walk thru all files in directory and process
+    initdb = False
     for root, _dirs, files in os.walk(directory):
         for file in files:
             datafile = f"{root}/{file}"
             print(f"Processing file: {datafile}")
-            name, ext = os.path.splitext(file)
-            fileimport(datafile, dbfile, cfgfile, username, tag, note, directory)
+            fileimport(datafile, dbfile, cfgfile, username, tag, note, directory, initdb)
 
 
 @app.command()
