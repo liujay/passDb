@@ -59,7 +59,7 @@ class PassCfg:
                 return value
         except (OSError, IOError) as e:
             raise Exception("Couldn't find path to config.ini.") from e
-        
+
     def list_config(self):
         config_file_path = self.configfile
         config = ConfigParser()
@@ -114,7 +114,7 @@ def getGPGconfig(cfgfile):
     return gnupg_home, keyring, recipients, symmetric_encryption, key
 
 class GPGCipher(object):
-    def __init__(self, gnupghome=None, keyring=None, recipients=None, symmetric=None): 
+    def __init__(self, gnupghome=None, keyring=None, recipients=None, symmetric=None):
         self.gnupghome = os.path.expanduser(gnupghome)
         self.keyring = keyring
         self.recipients = recipients
@@ -122,7 +122,7 @@ class GPGCipher(object):
 
     def __repr__(self):
         return f"<GPGhome: {self.gnupghome}>\n<Keyring: {self.keyring}>"
- 
+
     def encrypt(self, data, passphrase=None):
         if self.gnupghome:
             cipher = gnupg.GPG(gnupghome=self.gnupghome, keyring=self.keyring)
@@ -161,7 +161,7 @@ class GPGCipher(object):
                 open(data, 'rb'),
                 passphrase = passphrase
             )
-        else: 
+        else:
             clear = cipher.decrypt(
                 data,
                 passphrase = passphrase
@@ -172,7 +172,7 @@ class GPGCipher(object):
             print(f"decription error with status: {clear.status}")
             print(f"  !!! Check if key cache expired !!!")
             sys.exit(97)
-    
+
 def EncryptPassword(data, cfgfile, transcode=False):
     '''
     Encrypt the given data/string of password with cipher
@@ -196,7 +196,7 @@ def DecryptPassword(data, cfgfile, file=None):
     #print(f"\n----- cipher: {cipher.__repr__} -----\n")
     if file:
         clear = cipher.decrypt(data, key, file=True)
-    else:    
+    else:
         clear = cipher.decrypt(data, key)
     #print(f"decrypting password: {clear}")
     return clear
@@ -215,7 +215,7 @@ def displayResults(results, cfgfile=None, showpassword=False):
         for r in results:
             #   convert null value to string '---Null---'
             for col in ['id', 'service', 'username', 'tag', 'note']:
-                r[col] = r[col] if r[col] else '-- Null --' 
+                r[col] = r[col] if r[col] else '-- Null --'
             print(f"{r['id']:3}:: {r['service']}:: {r['username']}:: {r['tag']}:: {r['note']}")
             if showpassword and cfgfile:
                 password = DecryptPassword(r['password'], cfgfile)
@@ -420,7 +420,7 @@ def dirimport(directory: str,
     if not os.path.isdir(directory):
         print(f"----- {directory} is NOT a directory, see you next time ... -----")
         sys.exit(99)
-    
+
     #   walk thru all files in directory and process
     initdb = False
     for root, _dirs, files in os.walk(directory):
@@ -611,7 +611,7 @@ def inputentry(dbfile: str='database.db', cfgfile: str='config.ini',
     print(f"--- insert following entry to DB {dbfile}")
     print(f"  service      username       tag         note")
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
-    db['ACCOUNT'].insert(entry) 
+    db['ACCOUNT'].insert(entry)
 
 @app.command()
 def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
@@ -661,3 +661,4 @@ def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
 
 if __name__ == "__main__":
     app()
+
