@@ -6,7 +6,6 @@ __author__ = "Jay S. Liu"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-import argparse
 import ast
 import gnupg
 import json
@@ -24,6 +23,8 @@ from sqlite_utils import Database
 Use typer for v2
 '''
 import typer
+from typing import Optional
+from typing_extensions import Annotated
 
 app = typer.Typer()
 
@@ -342,24 +343,24 @@ def jsonFile2entry(tempFile):
     #   encrypt password before updating db
     return entry
 
-@app.command()
-def init(dbfile: str='database.db', cfgfile: str='config.ini', listcfg: bool=True):
+
+def initialization(ctx: typer.Context):
     """
-    Initialize ACCOUNT table if it does not exist, and
-    list config file
+    Initialize ACCOUNT table if it does not exist    
     """
+    dbfile = ctx.params['dbfile'] if 'dbfile' in ctx.params else 'database.db'
+    cfgfile = ctx.params['cfgfile'] if 'cfgfile' in ctx.params else 'config.ini'
     my_pass = PassCfg(dbfile, cfgfile)
-    if listcfg :
-        my_pass.list_config()
     my_pass.check_table()
+    my_pass.list_config()
 
 @app.command()
-def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False):
+#def showall(dbfile: str, cfgfile: str, showpassword: bool=False):
+def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False,
+            dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Display all entries in dbfile
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     db = Database(dbfile)
     results = db.query("select * from ACCOUNT")
     displayResults(results, cfgfile, showpassword)
@@ -368,15 +369,12 @@ def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: 
 def fileimport(datafile: str,
         dbfile: str='database.db', cfgfile: str='config.ini', 
         username: str='', tag: str='', note: str='', dir: str='',
-        initdb: bool=True):
+        dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Import one pwd file to db
         -- no check on exist or not
         -- datafile like service.gpg
     """
-    if initdb:
-        init(dbfile=dbfile, cfgfile=cfgfile)
-
     #   check if datafile with extention '.gpg'
     _dirName = os.path.dirname(datafile)
     filename = os.path.basename(datafile)
@@ -406,14 +404,14 @@ def fileimport(datafile: str,
 @app.command()
 def dirimport(directory: str,
         dbfile: str='database.db', cfgfile: str='config.ini', 
-        username: str='', tag: str='', note: str=''):
+        username: str='', tag: str='', note: str='',
+        dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+
     """
     Import one pwd file to db
         -- no check on exist or not
         -- datafile like service.gpg
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     #   expand directory
     directory = os.path.expanduser(directory)
     #   check if directory is real
@@ -422,22 +420,19 @@ def dirimport(directory: str,
         sys.exit(99)
 
     #   walk thru all files in directory and process
-    initdb = False
     for root, _dirs, files in os.walk(directory):
         for file in files:
             datafile = f"{root}/{file}"
             print(f"Processing file: {datafile}")
-            fileimport(datafile, dbfile, cfgfile, username, tag, note, directory, initdb)
-
+            fileimport(datafile, dbfile, cfgfile, username, tag, note, directory)
 
 @app.command()
 def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
-             directory: str='_Export'):
+             directory: str='_Export',
+             dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     export all passwords to files live in {directory}
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
@@ -445,12 +440,11 @@ def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()
 def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
-                id: str='', directory: str='_Export'):
+                id: str='', directory: str='_Export',
+                dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Export one entry by id
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     db = Database(dbfile)
     #   get the entry by id
     id = int(id)
@@ -464,14 +458,12 @@ def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
     print(entry)
     exportEntry(entry, directory)
 
-
 @app.command()
-def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
+def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini',
+                dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Convert pub <--> symmetirc key encryption
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         clear = DecryptPassword(entry['password'], cfgfile)
@@ -486,12 +478,11 @@ def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
 @app.command()
 def search(dbfile: str='database.db', cfgfile: str='config.ini', 
            id: str='', service: str='', username: str='', tag: str='', 
-           showpassword: bool=False):
+           showpassword: bool=False,
+           dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Search on id, service, username and/or tag
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
         #   invalid whereClause, ie, no support for what were given
@@ -507,12 +498,11 @@ def search(dbfile: str='database.db', cfgfile: str='config.ini',
 @app.command()
 def remove(dbfile: str='database.db', cfgfile: str='config.ini', 
            id: str='', service: str='', username: str='', tag: str='', 
-           showpassword: bool=False, backup: bool=True, backupDir: str='./_DELETED'):
+           showpassword: bool=False, backup: bool=True, backupDir: str='./_DELETED',
+           dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Delete on id, service, username and/or tag
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     deleted = []
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
@@ -547,15 +537,13 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
     #   keep the deleted entries, just in case
     return deleted
 
-
 @app.command()    
 def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
-               random: bool=False, xkcd: bool=False, editor: bool=False):
+               random: bool=False, xkcd: bool=False, editor: bool=False,
+               dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Insert one entry to db -- input by user mostly interactively
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     cfg = PassCfg('dontcare', cfgfile)
     if random:
         #   get length, punctuation from cfgfile
@@ -615,12 +603,11 @@ def inputentry(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()
 def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
-            id: str=''):
+            id: str='',
+            dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Update one entry
     """
-    init(dbfile=dbfile, cfgfile=cfgfile)
-
     cfg = PassCfg('dontcare', cfgfile)
     myeditor = cfg.get_config("OTHERS", "editor")
     delay = cfg.get_config("OTHERS", "sleep")
