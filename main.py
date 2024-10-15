@@ -343,13 +343,24 @@ def jsonFile2entry(tempFile):
     #   encrypt password before updating db
     return entry
 
-
 def initialization(ctx: typer.Context):
     """
     Initialize ACCOUNT table if it does not exist    
     """
-    dbfile = ctx.params['dbfile'] if 'dbfile' in ctx.params else 'database.db'
-    cfgfile = ctx.params['cfgfile'] if 'cfgfile' in ctx.params else 'config.ini'
+    #
+    #   get dbfile and cfgfile from the context,
+    #       or set to default
+    #
+    dbfile = ctx.params.get('dbfile', 'database.db')
+    cfgfile = ctx.params.get('cfgfile', 'config.ini')
+    #
+    #   display some interesting info in the context
+    #
+    print(f"\n\ninit called from: {ctx.info_name} with -----")
+    print(f"    params: {ctx.params}\n")
+    print(f"        dbfile: {dbfile}")
+    print(f"        cfgfile: {cfgfile}")
+    print(f"---------------------------------------\n")
     my_pass = PassCfg(dbfile, cfgfile)
     my_pass.check_table()
     my_pass.list_config()
@@ -648,4 +659,5 @@ def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
 
 if __name__ == "__main__":
     app()
+
 
