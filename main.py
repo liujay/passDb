@@ -549,11 +549,12 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
     return deleted
 
 @app.command()
-def passwordgen(dbfile: str='database.db', cfgfile: str='config.ini',
-               xkcd: bool=True, save2db: bool=False,
+def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
+               xkcd: bool=True, save2db: bool=False, note: str='',
                dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
-    Generate random passwords
+    Password generator --
+        either xkcd or random style
     """
     cfg = PassCfg('dontcare', cfgfile)
     passwordlist = []
@@ -580,8 +581,8 @@ def passwordgen(dbfile: str='database.db', cfgfile: str='config.ini',
         entry["service"] = 'Random Passwords'
         entry["username"] = 'xkcd' if xkcd else 'random'
         entry["password"] = EncryptPassword(clear, cfgfile)
-        entry["tag"] = 'Random Passwords'
-        entry["note"] = f"created on {date}"
+        entry["tag"] = 'random'
+        entry["note"] = f"{note}, created on {date}"
         #   insert to Db
         db = Database(dbfile)
         print(f"--- insert following entry to DB {dbfile}")
