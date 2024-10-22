@@ -578,10 +578,10 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
     if save2db:
         date = f'{datetime.today():%Y-%m-%d}'
         entry = {}
-        entry["service"] = 'Random Passwords'
-        entry["username"] = 'xkcd' if xkcd else 'random'
+        entry["service"] = f"Random Passwords"
+        entry["username"] = f"random-{length}" if not xkcd else f"xkcd-{numberwords}"
         entry["password"] = EncryptPassword(clear, cfgfile)
-        entry["tag"] = 'random'
+        entry["tag"] = 'passgen'
         entry["note"] = f"{note}, created on {date}"
         #   insert to Db
         db = Database(dbfile)
