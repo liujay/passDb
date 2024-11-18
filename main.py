@@ -548,6 +548,48 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
     #   keep the deleted entries, just in case
     return deleted
 
+@app.command()
+def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
+               xkcd: bool=True, save2db: bool=False, note: str='',
+               dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+    """
+    Password generator --
+        either xkcd or random style
+    """
+    cfg = PassCfg('dontcare', cfgfile)
+    passwordlist = []
+    if not xkcd:
+        #   get length, punctuation from cfgfile
+        length = int(cfg.get_config("PASSWORD_PREFERENCE", "length"))
+        punctuation = True if cfg.get_config("PASSWORD_PREFERENCE", "punctuation") == 'True' else False
+        for i in range(10):
+            passwordlist.append(randomstyle(length, punctuation))
+    else:
+        #   get numberwords, delimiter, case, dictionary from cfgfile
+        numberwords =  int(cfg.get_config("PASSWORD_PREFERENCE", "numberwords"))
+        delimiter = ast.literal_eval(cfg.get_config("PASSWORD_PREFERENCE", "delimiter"))
+        caseselection = cfg.get_config("PASSWORD_PREFERENCE", "caseselection")
+        dict = cfg.get_config("PASSWORD_PREFERENCE", "dictionary")
+        for i in range(10):
+            passwordlist.append(xkcdstyle(numberwords, delimiter, caseselection, dict))
+    clear = "\n".join(passwordlist)
+    print(f"Here is a list of 10 random passwords at your request:\n")
+    print(f"{clear}\n")
+    if save2db:
+        date = f'{datetime.today():%Y-%m-%d}'
+        entry = {}
+        entry["service"] = f"Random Passwords"
+        entry["username"] = f"random-{length}" if not xkcd else f"xkcd-{numberwords}"
+        entry["password"] = EncryptPassword(clear, cfgfile)
+        entry["tag"] = 'passgen'
+        entry["note"] = f"{note}, created on {date}"
+        #   insert to Db
+        db = Database(dbfile)
+        print(f"--- insert following entry to DB {dbfile}")
+        print(f"  service      username       tag         note")
+        print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
+        db['ACCOUNT'].insert(entry)
+
 @app.command()    
 def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
                random: bool=False, xkcd: bool=False, editor: bool=False,
