@@ -9,6 +9,8 @@ __license__ = "MIT"
 import ast
 import gnupg
 import json
+import logging
+import logging.config
 import os
 import re
 import sys
@@ -27,6 +29,8 @@ from typing import Optional
 from typing_extensions import Annotated
 
 app = typer.Typer()
+
+logger = None
 
 class PassCfg:
     def __init__(self, dbfile, configfile, verbose=False):
@@ -223,6 +227,8 @@ def displayResults(results, cfgfile=None, showpassword=False):
                 print(f"{password}")
     else:
         print(f"--- Empty result ---")
+        global logger
+        logger.info(f"--- Empty result ---")
 
 def insertEntry(dbfile, service, password, username=None, tag=None, note=None, dir=None):
     """
@@ -244,7 +250,7 @@ def insertEntry(dbfile, service, password, username=None, tag=None, note=None, d
     print(f"{entry["service"]}, {entry["username"]},  {entry["tag"]}, {entry["note"]}")
     db['ACCOUNT'].insert(entry) 
 
-def exportEntry(entry, root=None):
+def exportOne(entry, root=None):
     """
     Export one entry to a file where
         dir is composed from tag, and
@@ -256,7 +262,7 @@ def exportEntry(entry, root=None):
         dir = f"{root}/{dir}"
     #   take care of '/' in service that was used as basename of file
     #       eg, someone uses "https://any.com/app" as service name
-    basename = entry['service'].replace('/','_')
+    basename = entry['service'].replace('/','_').replace(' ','-')
     filename = f"{dir}/{basename}.gpg"
     print(f"entry id: {entry['id']}, service: {'service'}, tag: {entry['tag']}")
     print(f"exporting entry to file: {filename}")
@@ -348,11 +354,14 @@ def initialization(ctx: typer.Context):
     Initialize ACCOUNT table if it does not exist    
     """
     #
-    #   get dbfile and cfgfile from the context,
+    #   get dbfile, cfgfile and logcfgfile from the context,
     #       or set to default
     #
     dbfile = ctx.params.get('dbfile', 'database.db')
     cfgfile = ctx.params.get('cfgfile', 'config.ini')
+    #   get logging config file from master cfgfile
+    cfg = PassCfg('dontcare', cfgfile)
+    logcfgfile = cfg.get_config('LOGGING', 'log_config_file')
     #
     #   display some interesting info in the context
     #
@@ -360,10 +369,17 @@ def initialization(ctx: typer.Context):
     print(f"    params: {ctx.params}\n")
     print(f"        dbfile: {dbfile}")
     print(f"        cfgfile: {cfgfile}")
+    print(f"        logfgfile: {logcfgfile}")
     print(f"---------------------------------------\n")
     my_pass = PassCfg(dbfile, cfgfile)
     my_pass.check_table()
     my_pass.list_config()
+    #
+    #   setup logger
+    #
+    logging.config.fileConfig(logcfgfile)
+    global logger
+    logger = logging.getLogger(ctx.info_name)
 
 @app.command()
 #def showall(dbfile: str, cfgfile: str, showpassword: bool=False):
@@ -373,8 +389,11 @@ def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: 
     Display all entries in dbfile
     """
     db = Database(dbfile)
-    results = db.query("select * from ACCOUNT")
+    myQuery = "select * from ACCOUNT"
+    results = db.query(myQuery)
     displayResults(results, cfgfile, showpassword)
+    global logger
+    logger.info(myQuery)
 
 @app.command()    
 def fileimport(datafile: str,
@@ -410,6 +429,10 @@ def fileimport(datafile: str,
         myTag = tag if tag else "noTag"
     #   insert to Db
     insertEntry(dbfile, service, password, username, myTag, note)
+    global logger
+    logger.info(\
+        f"import one entry to ACCOUNT where service: {service} and username: {username}"\
+        )
     return True
 
 @app.command()
@@ -447,12 +470,16 @@ def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
-        exportEntry(entry, directory)
+        exportOne(entry, directory)
+        global logger
+        logger.info(\
+            f"export entry from ACCOUNT where service: {entry['service']} and username: {entry['username']}"\
+            )
 
 @app.command()
 def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
-                id: str='', directory: str='_Export',
-                dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+              id: str='', directory: str='_Export',
+              dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
     """
     Export one entry by id
     """
@@ -467,7 +494,11 @@ def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
         sys.exit(89)
     #   real job -- export
     print(entry)
-    exportEntry(entry, directory)
+    exportOne(entry, directory)
+    global logger
+    logger.info(\
+        f"export entry from ACCOUNT where service: {entry['service']} and username: {entry['username']}"\
+        )
 
 @app.command()
 def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini',
@@ -477,11 +508,21 @@ def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
+        print(f"... transcoding entry with service: {entry['service']} + username: {entry['username']}")
         clear = DecryptPassword(entry['password'], cfgfile)
         #   set trancode to `True` in procedure EncrypPassword to activate it
         #
         password = EncryptPassword(clear, cfgfile, True)
         db['ACCOUNT'].update(entry['id'], {'password': password})
+    #
+    #   get encription type defined (in string format 'True'/'False') in config file and
+    #       convert it to logic
+    home, keyring, recipients, symmetric, key = getGPGconfig(cfgfile)
+    symmetric = True if symmetric=='True' else False
+    global logger
+    logger.info(\
+        f"transcode db from symmetric: {symmetric} to {not symmetric}"\
+        )
     #
     #   Remind user to update cfgfile
     print(f"\n\n!!! Be sure to update {cfgfile} before next run!!!\n\n")
@@ -500,10 +541,11 @@ def search(dbfile: str='database.db', cfgfile: str='config.ini',
         return None
     selectPrefix = f"select * from ACCOUNT"
     myQuery = f"{selectPrefix} {whereClause}"
+    global logger
+    logger.info(myQuery)
     print(f"\nquery: {myQuery}\n")
     db = Database(dbfile)
-    _results = db.query(myQuery)
-    results = [x for x in _results]
+    results = [x for x in db.query(myQuery)]
     displayResults(results, cfgfile, showpassword)
 
 @app.command()
@@ -523,8 +565,7 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
     myQuery = f"{selectPrefix} {whereClause}"
     print(f"\nquery: {myQuery}\n")
     db = Database(dbfile)
-    _results = db.query(myQuery)
-    results = [x for x in _results]
+    results = [x for x in db.query(myQuery)]
     if not results:
         print(f"\n--- Found NO entry to DELETE ---")
         print(f"--- Have a good one ---\n")
@@ -540,8 +581,12 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
         if selection and selection[0].lower() == 'y':
             print(f"!!! DELETING entry: {e['service']} !!!\n")
             if backup:
-                exportEntry(e, backupDir)
+                exportOne(e, backupDir)
             db['ACCOUNT'].delete(e['id'])
+            global logger
+            logger.info(\
+                f"delete entry from ACCOUNT where service: {e['service']} and username: {e['username']}"\
+                )
             deleted.append(e)
         else:
             print(f"Skipping entry id: {e['id']}, service: {e['service']}, username: {e['username']}\n")
@@ -589,6 +634,10 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
         print(f"  service      username       tag         note")
         print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
         db['ACCOUNT'].insert(entry)
+        global logger
+        logger.info(\
+            f"insert entry to ACCOUNT where service: {entry['service']} and username: {entry['username']}"\
+            )
 
 @app.command()    
 def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
@@ -653,6 +702,10 @@ def inputentry(dbfile: str='database.db', cfgfile: str='config.ini',
     print(f"  service      username       tag         note")
     print(f"{entry["service"]}:: {entry["username"]}::  {entry["tag"]}:: {entry["note"]}")
     db['ACCOUNT'].insert(entry)
+    global logger
+    logger.info(\
+        f"insert entry to ACCOUNT where service: {entry['service']} and username: {entry['username']}"\
+        )
 
 @app.command()
 def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
@@ -698,6 +751,10 @@ def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
     #   encrypt password before update db
     entry['password'] = EncryptPassword(entry['password'], cfgfile)
     db['ACCOUNT'].update(id, entry)
+    global logger
+    logger.info(\
+        f"update entry in ACCOUNT where service: {entry['service']} and username: {entry['username']}"\
+        )
 
 if __name__ == "__main__":
     app()
