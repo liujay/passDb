@@ -349,6 +349,7 @@ def jsonFile2entry(tempFile):
     #   encrypt password before updating db
     return entry
 
+@app.callback()
 def initialization(ctx: typer.Context):
     """
     Initialize ACCOUNT table if it does not exist    
@@ -383,8 +384,7 @@ def initialization(ctx: typer.Context):
 
 @app.command()
 #def showall(dbfile: str, cfgfile: str, showpassword: bool=False):
-def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False,
-            dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: bool=False):
     """
     Display all entries in dbfile
     """
@@ -398,8 +398,7 @@ def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: 
 @app.command()    
 def fileimport(datafile: str,
         dbfile: str='database.db', cfgfile: str='config.ini', 
-        username: str='', tag: str='', note: str='', dir: str='',
-        dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+        username: str='', tag: str='', note: str='', dir: str=''):
     """
     Import one pwd file to db
         -- no check on exist or not
@@ -438,8 +437,7 @@ def fileimport(datafile: str,
 @app.command()
 def dirimport(directory: str,
         dbfile: str='database.db', cfgfile: str='config.ini', 
-        username: str='', tag: str='', note: str='',
-        dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+        username: str='', tag: str='', note: str=''):
 
     """
     Import one pwd file to db
@@ -462,8 +460,7 @@ def dirimport(directory: str,
 
 @app.command()
 def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
-             directory: str='_Export',
-             dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+             directory: str='_Export'):
     """
     export all passwords to files live in {directory}
     """
@@ -478,8 +475,7 @@ def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()
 def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
-              id: str='', directory: str='_Export',
-              dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+                id: str='', directory: str='_Export'):
     """
     Export one entry by id
     """
@@ -501,8 +497,7 @@ def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
         )
 
 @app.command()
-def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini',
-                dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
     """
     Convert pub <--> symmetirc key encryption
     """
@@ -530,8 +525,7 @@ def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini',
 @app.command()
 def search(dbfile: str='database.db', cfgfile: str='config.ini', 
            id: str='', service: str='', username: str='', tag: str='', 
-           showpassword: bool=False,
-           dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+           showpassword: bool=False):
     """
     Search on id, service, username and/or tag
     """
@@ -551,8 +545,7 @@ def search(dbfile: str='database.db', cfgfile: str='config.ini',
 @app.command()
 def remove(dbfile: str='database.db', cfgfile: str='config.ini', 
            id: str='', service: str='', username: str='', tag: str='', 
-           showpassword: bool=False, backup: bool=True, backupDir: str='./_DELETED',
-           dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+           showpassword: bool=False, backup: bool=True, backupDir: str='./_DELETED'):
     """
     Delete on id, service, username and/or tag
     """
@@ -595,8 +588,7 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()
 def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
-               xkcd: bool=True, save2db: bool=False, note: str='',
-               dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+               xkcd: bool=True, save2db: bool=False, note: str=''):
     """
     Password generator --
         either xkcd or random style
@@ -641,8 +633,7 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()    
 def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
-               random: bool=False, xkcd: bool=False, editor: bool=False,
-               dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+               random: bool=False, xkcd: bool=False, editor: bool=False):
     """
     Insert one entry to db -- input by user mostly interactively
     """
@@ -709,8 +700,7 @@ def inputentry(dbfile: str='database.db', cfgfile: str='config.ini',
 
 @app.command()
 def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
-            id: str='',
-            dummy: Annotated[Optional[str], typer.Option(callback=initialization)] = None):
+            id: str=''):
     """
     Update one entry
     """
