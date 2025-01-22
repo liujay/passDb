@@ -632,10 +632,10 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
             )
 
 @app.command()    
-def inputentry(dbfile: str='database.db', cfgfile: str='config.ini', 
+def addentry(dbfile: str='database.db', cfgfile: str='config.ini',
                random: bool=False, xkcd: bool=False, editor: bool=False):
     """
-    Insert one entry to db -- input by user mostly interactively
+    Add one entry to db -- input by user mostly interactively
     """
     cfg = PassCfg('dontcare', cfgfile)
     if random:
