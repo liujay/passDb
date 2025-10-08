@@ -349,25 +349,16 @@ def jsonFile2entry(tempFile):
     #   encrypt password before updating db
     return entry
 
-@app.callback()
-def initialization(ctx: typer.Context):
+def _initialization(dbfile: str='database.db', cfgfile: str='config.ini'):
     """
     Initialize ACCOUNT table if it does not exist    
     """
-    #
-    #   get dbfile, cfgfile and logcfgfile from the context,
-    #       or set to default
-    #
-    dbfile = ctx.params.get('dbfile', 'database.db')
-    cfgfile = ctx.params.get('cfgfile', 'config.ini')
-    #   get logging config file from master cfgfile
-    cfg = PassCfg('dontcare', cfgfile)
+    cfg = PassCfg(dbfile, cfgfile)
     logcfgfile = cfg.get_config('LOGGING', 'log_config_file')
     #
-    #   display some interesting info in the context
+    #   display key info in initialization
     #
-    print(f"\n\ninit called from: {ctx.info_name} with -----")
-    print(f"    params: {ctx.params}\n")
+    print(f"\n\ninit with following -------------------")
     print(f"        dbfile: {dbfile}")
     print(f"        cfgfile: {cfgfile}")
     print(f"        logfgfile: {logcfgfile}")
@@ -380,7 +371,7 @@ def initialization(ctx: typer.Context):
     #
     logging.config.fileConfig(logcfgfile)
     global logger
-    logger = logging.getLogger(ctx.info_name)
+    logger = logging.getLogger(__name__)
 
 @app.command()
 #def showall(dbfile: str, cfgfile: str, showpassword: bool=False):
@@ -388,6 +379,7 @@ def showall(dbfile: str='database.db', cfgfile: str='config.ini', showpassword: 
     """
     Display all entries in dbfile
     """
+    _initialization(dbfile, cfgfile)
     db = Database(dbfile)
     myQuery = "select * from ACCOUNT"
     results = db.query(myQuery)
@@ -404,6 +396,7 @@ def fileimport(datafile: str,
         -- no check on exist or not
         -- datafile like service.gpg
     """
+    _initialization(dbfile, cfgfile)
     #   check if datafile with extention '.gpg'
     _dirName = os.path.dirname(datafile)
     filename = os.path.basename(datafile)
@@ -444,6 +437,7 @@ def dirimport(directory: str,
         -- no check on exist or not
         -- datafile like service.gpg
     """
+    _initialization(dbfile, cfgfile)
     #   expand directory
     directory = os.path.expanduser(directory)
     #   check if directory is real
@@ -464,6 +458,7 @@ def exportdb(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     export all passwords to files live in {directory}
     """
+    _initialization(dbfile, cfgfile)
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(entry)
@@ -479,6 +474,7 @@ def exportentry(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Export one entry by id
     """
+    _initialization(dbfile, cfgfile)
     db = Database(dbfile)
     #   get the entry by id
     id = int(id)
@@ -501,6 +497,7 @@ def transcodedb(dbfile: str='database.db', cfgfile: str='config.ini'):
     """
     Convert pub <--> symmetirc key encryption
     """
+    _initialization(dbfile, cfgfile)
     db = Database(dbfile)
     for entry in db['ACCOUNT'].rows:
         print(f"... transcoding entry with service: {entry['service']} + username: {entry['username']}")
@@ -529,6 +526,7 @@ def search(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Search on id, service, username and/or tag
     """
+    _initialization(dbfile, cfgfile)
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
         #   invalid whereClause, ie, no support for what were given
@@ -549,6 +547,7 @@ def remove(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Delete on id, service, username and/or tag
     """
+    _initialization(dbfile, cfgfile)
     deleted = []
     whereClause = buildWhereClause(id, service, username, tag)
     if not whereClause:
@@ -593,6 +592,7 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
     Password generator --
         either xkcd or random style
     """
+    _initialization(dbfile, cfgfile)
     cfg = PassCfg('dontcare', cfgfile)
     passwordlist = []
     if not xkcd:
@@ -637,6 +637,7 @@ def addentry(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Add one entry to db -- input by user mostly interactively
     """
+    _initialization(dbfile, cfgfile)
     cfg = PassCfg('dontcare', cfgfile)
     if random:
         #   get length, punctuation from cfgfile
@@ -704,6 +705,7 @@ def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Update one entry
     """
+    _initialization(dbfile, cfgfile)
     cfg = PassCfg('dontcare', cfgfile)
     myeditor = cfg.get_config("OTHERS", "editor")
     delay = cfg.get_config("OTHERS", "sleep")
