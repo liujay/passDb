@@ -351,10 +351,13 @@ def jsonFile2entry(tempFile):
 
 def _initialization(dbfile: str='database.db', cfgfile: str='config.ini'):
     """
-    Initialize ACCOUNT table if it does not exist    
+    1. Initialize ACCOUNT table if it does not exist
+    2. List content of config file
+    3. Initialize logger, and
+    4. Return the PassCfg object
     """
-    cfg = PassCfg(dbfile, cfgfile)
-    logcfgfile = cfg.get_config('LOGGING', 'log_config_file')
+    mypass = PassCfg(dbfile, cfgfile)
+    logcfgfile = mypass.get_config('LOGGING', 'log_config_file')
     #
     #   display key info in initialization
     #
@@ -363,15 +366,18 @@ def _initialization(dbfile: str='database.db', cfgfile: str='config.ini'):
     print(f"        cfgfile: {cfgfile}")
     print(f"        logfgfile: {logcfgfile}")
     print(f"---------------------------------------\n")
-    my_pass = PassCfg(dbfile, cfgfile)
-    my_pass.check_table()
-    my_pass.list_config()
+    mypass.check_table()
+    mypass.list_config()
     #
     #   setup logger
     #
-    logging.config.fileConfig(logcfgfile)
+    if os.path.exists(logcfgfile):
+        logging.config.fileConfig(logcfgfile)
+    else:
+        pass
     global logger
     logger = logging.getLogger(__name__)
+    return mypass
 
 @app.command()
 #def showall(dbfile: str, cfgfile: str, showpassword: bool=False):
@@ -592,8 +598,7 @@ def passgen(dbfile: str='database.db', cfgfile: str='config.ini',
     Password generator --
         either xkcd or random style
     """
-    _initialization(dbfile, cfgfile)
-    cfg = PassCfg('dontcare', cfgfile)
+    cfg = _initialization(dbfile, cfgfile)
     passwordlist = []
     if not xkcd:
         #   get length, punctuation from cfgfile
@@ -637,8 +642,7 @@ def addentry(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Add one entry to db -- input by user mostly interactively
     """
-    _initialization(dbfile, cfgfile)
-    cfg = PassCfg('dontcare', cfgfile)
+    cfg = _initialization(dbfile, cfgfile)
     if random:
         #   get length, punctuation from cfgfile
         length = int(cfg.get_config("PASSWORD_PREFERENCE", "length"))
@@ -705,8 +709,7 @@ def updateentry(dbfile: str='database.db', cfgfile: str='config.ini',
     """
     Update one entry
     """
-    _initialization(dbfile, cfgfile)
-    cfg = PassCfg('dontcare', cfgfile)
+    cfg = _initialization(dbfile, cfgfile)
     myeditor = cfg.get_config("OTHERS", "editor")
     delay = cfg.get_config("OTHERS", "sleep")
 
