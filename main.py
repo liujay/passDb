@@ -100,6 +100,7 @@ class PassCfg:
             "tag": str,
             "note": str,
         }, pk="id", if_not_exists=True)
+        print(f"--- ACCOUNT table ok in {self.db} ---")
 
 def getGPGconfig(cfgfile):
     """
@@ -366,17 +367,19 @@ def _initialization(dbfile: str='database.db', cfgfile: str='config.ini'):
     print(f"        cfgfile: {cfgfile}")
     print(f"        logfgfile: {logcfgfile}")
     print(f"---------------------------------------\n")
-    mypass.check_table()
+    # 1. init ACCOUNT table if db exists
+    if os.path.exists(dbfile):
+        mypass.check_table()
+    # 2. list config file
     mypass.list_config()
-    #
-    #   setup logger
-    #
+    # 3.  init/setup logger
     if os.path.exists(logcfgfile):
         logging.config.fileConfig(logcfgfile)
     else:
         pass
     global logger
     logger = logging.getLogger(__name__)
+    # 4.
     return mypass
 
 @app.command()
